@@ -12,12 +12,17 @@
     <name>Demo Java agent</name>
 
     <dependencies>
-        <!-- https://mvnrepository.com/artifact/org.javassist/javassist -->
+<!--        <dependency>-->
+<!--            <groupId>org.ow2.asm</groupId>-->
+<!--            <artifactId>asm</artifactId>-->
+<!--            <version>9.1</version>-->
+<!--        </dependency>-->
         <dependency>
             <groupId>org.javassist</groupId>
             <artifactId>javassist</artifactId>
-            <version>${javassist.version}</version>
+            <version>3.28.0-GA</version>
         </dependency>
+
     </dependencies>
 
 
@@ -59,8 +64,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <properties>
-        <javassist.version>3.26.0-GA</javassist.version>
-    </properties>
 </project>
