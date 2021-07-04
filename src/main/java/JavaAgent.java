@@ -1,7 +1,4 @@
-import javassist.ClassPool;
-import javassist.CtClass;
-import javassist.CtConstructor;
-import javassist.CtMethod;
+import javassist.*;
 
 import java.io.File;
 import java.lang.instrument.ClassFileTransformer;
@@ -40,8 +37,9 @@ public class JavaAgent {
                            for( CtConstructor m : cc.getConstructors()) {
                                m.addLocalVariable("elapsedTime", CtClass.longType);
                                m.insertBefore("elapsedTime = System.currentTimeMillis();");
-                               m.insertAfter("{elapsedTime = System.currentTimeMillis() - elapsedTime;"
-                                       + "System.out.println(\"Method Executed in ms: \" + elapsedTime);}");
+                               m.insertAfter(String.format("{elapsedTime = System.currentTimeMillis() - elapsedTime;"
+                                       + "System.out.println(\"Method %s Executed in ms: \" + elapsedTime);}",
+                                       m.getLongName()));
                            }
                            for( CtMethod m : cc.getDeclaredMethods()) {
 //                           for( CtMethod m : cc.getMethods()) {
@@ -91,18 +89,29 @@ public class JavaAgent {
                 // Javassist
                 try {
                     ClassPool cp = ClassPool.getDefault();
-                    CtClass cc = cp.get(s);
+                    CtClass cc = cp.get(s.replace('/', '.'));
                     if( cc == null) {
                         log.info(String.format(" Cannot find: %s", s));
+                    } else if( cc.isInterface()) {
+                        log.info(String.format(" Cannot transform interface: %s", s));
+//                    } else if( Modifier.isAbstract( cc.getModifiers())) {
+//                        log.info(String.format(" Cannot transform interface: %s", s));
                     } else {
-                        log.info(String.format(" .. %s", cc.getName()));
-                        for (CtConstructor m : cc.getConstructors()) {
-                            m.insertBefore(String.format(
-                                    "System.out.println(\"START %s\");", m.getLongName()));
-                            m.insertAfter(String.format(
-                                    "System.out.println(\"END   %s\");", m.getLongName()));
+                        log.info(String.format(" .. %s ( frozen: %b, interface: %b)",
+                                cc.getName(), cc.isFrozen(), cc.isInterface()));
+                        for (CtMethod m : cc.getMethods()) {
+//                            for (CtMethod m : cc.getDeclaredMethods()) {
+                            log.info(String.format("Method: %s::%s", m.getDeclaringClass().getSimpleName(), m.getLongName()));
+
+                            if( !m.getDeclaringClass().getSimpleName().equals("Object") &&
+                                    !Modifier.isAbstract(m.getModifiers())) {
+                                m.insertBefore(String.format(
+                                        "System.out.println(\"START %s\");", m.getLongName()));
+                                m.insertAfter(String.format(
+                                        "System.out.println(\"END   %s\");", m.getLongName()));
+                            }
                         }
-                        for (CtMethod m : cc.getDeclaredMethods()) {
+                        for (CtConstructor m : cc.getConstructors()) {
                             m.insertBefore(String.format(
                                     "System.out.println(\"START %s\");", m.getLongName()));
                             m.insertAfter(String.format(
