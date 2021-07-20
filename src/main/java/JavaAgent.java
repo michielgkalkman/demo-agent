@@ -1,4 +1,7 @@
 import javassist.*;
+import javassist.bytecode.AccessFlag;
+import javassist.bytecode.AttributeInfo;
+import javassist.bytecode.MethodInfo;
 
 import java.io.File;
 import java.lang.instrument.ClassFileTransformer;
@@ -6,6 +9,7 @@ import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -23,64 +27,6 @@ public class JavaAgent {
 
         log.info(String.format("Agent:Starting Java Agent...... %s", agentArgs == null ? "" : agentArgs));
 
-//        instrumentation.addTransformer( new ClassFileTransformer() {
-//               @Override
-//               public byte[] transform(ClassLoader classLoader, String s, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) {
-//
-//                   log.info(String.format("Agent:Transform '%s'", s));
-//
-//                   if ("java/io/File".equals(s)) {
-//                       log.info( String.format("Agent:Transforming .... %s", s));
-//                       // Javassist
-//                       try {
-//                           ClassPool cp = ClassPool.getDefault();
-//                           CtClass cc = cp.get("java.io.File");
-//                           for( CtConstructor m : cc.getConstructors()) {
-//                               m.addLocalVariable("elapsedTime", CtClass.longType);
-//                               m.insertBefore("elapsedTime = System.currentTimeMillis();");
-//                               m.insertAfter(String.format("{elapsedTime = System.currentTimeMillis() - elapsedTime;"
-//                                       + "System.out.println(\"Method %s Executed in ms: \" + elapsedTime);}",
-//                                       m.getLongName()));
-//                           }
-//                           for( CtMethod m : cc.getDeclaredMethods()) {
-//                               log.info(String.format("Agent:Processing %s", m.getLongName()));
-//                               m.addLocalVariable("elapsedTime", CtClass.longType);
-//                               StringBuilder stringBuilder = new StringBuilder();
-//                               stringBuilder.append("elapsedTime = System.currentTimeMillis();")
-//                                       .append( String.format("System.out.println(\"Method %s(", m.getLongName()));
-//
-//                               final CtClass[] parameterTypes = m.getParameterTypes();
-//                               for(int i = 0; i< parameterTypes.length; i++) {
-//                                   if( i>0) {
-//                                       stringBuilder.append(',');
-//                                   }
-//                                   stringBuilder.append(parameterTypes[i].toString());
-//                               }
-//
-//                                stringBuilder.append( ")\");");
-//
-//                                m.insertBefore( stringBuilder.toString());
-//
-////                               m.insertBefore(String.format("elapsedTime = System.currentTimeMillis();"
-////                                               + "System.out.println(\"Method %s Executing\");", m.getLongName()));
-//                               m.insertAfter(
-//                                       String.format(
-//                                       "{elapsedTime = System.currentTimeMillis() - elapsedTime;"
-//                                       + "System.out.println(\"Method %s Executed in ms: \" + elapsedTime);}"
-//                               , m.getLongName()));
-//                           }
-////                           CtMethod m = cc.getDeclaredMethod("exists");
-//                           byte[] byteCode = cc.toBytecode();
-//                           cc.detach();
-//                           return byteCode;
-//                       } catch (Exception ex) {
-//                           ex.printStackTrace();
-//                       }
-//                   }
-//
-//                   return null;
-//               }
-//           }, true);
         instrumentation.addTransformer( new ClassFileTransformer() {
             @Override
             public byte[] transform(ClassLoader classLoader, String s, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) {
@@ -97,35 +43,11 @@ public class JavaAgent {
                     } else {
                         log.info(String.format("Agent: .. %s ( frozen: %b, interface: %b)",
                                 cc.getName(), cc.isFrozen(), cc.isInterface()));
-                        for (CtMethod m : cc.getMethods()) {
-                            log.info(String.format("Agent:Method: %s::%s", m.getDeclaringClass().getSimpleName(), m.getLongName()));
 
-                            if(
-                                    !("java.lang".equals(m.getDeclaringClass().getPackageName()) &&
-                                      m.getDeclaringClass().getSimpleName().equals("Object") )
-                                            &&
-                                    !Modifier.isAbstract(m.getModifiers())) {
-                                m.insertBefore(String.format(
-                                        "System.out.println(\"START %s\");" +
-                                                "try {JavaAgent.hello();" +
-                                                "} catch( Throwable e) {" +
-                                                "System.out.println(e);" +
-                                                "System.out.println(e.getMessage());" +
-                                                "System.out.println(e.getCause());" +
-                                                "                    e.printStackTrace();\n }" +
-                                                "", m.getLongName()));
-                                m.insertAfter(String.format(
-                                        "System.out.println(\"END   %s\");", m.getLongName()));
-                            }
-                        }
-                        for (CtConstructor m : cc.getConstructors()) {
-                            m.insertBefore(String.format(
-                                    "System.out.println(\"START %s\");", m.getLongName()));
-                            m.insertAfter(String.format(
-                                    "System.out.println(\"END   %s\");", m.getLongName()));
+                        if( isTransform(cc)) {
+                            annotate(cc);
                         }
                     }
-//                           CtMethod m = cc.getDeclaredMethod("exists");
                     byte[] byteCode = cc.toBytecode();
                     cc.detach();
                     return byteCode;
@@ -147,7 +69,81 @@ public class JavaAgent {
 
     }
 
+    private static boolean isTransform(CtClass cc) {
+        log.info(String.format("Agent:check %s::%S", cc.getPackageName(), cc.getSimpleName()));
+        return
+                !(
+                    "java.lang".equals(cc.getPackageName())
+                    || (cc.getPackageName() == null && "JavaAgent".equals(cc.getSimpleName()))
+                );
+    }
+
+    private static void annotate(CtClass cc) throws CannotCompileException {
+        for (CtMethod m : cc.getMethods()) {
+            log.info(String.format("Agent:Method: %s::%s", m.getDeclaringClass().getSimpleName(), m.getLongName()));
+
+            if(
+                    !("java.lang".equals(m.getDeclaringClass().getPackageName()) &&
+                      m.getDeclaringClass().getSimpleName().equals("Object") )
+                            &&
+                    !Modifier.isAbstract(m.getModifiers())) {
+
+
+                final MethodInfo methodInfo = m.getMethodInfo();
+                final List<AttributeInfo> attributes = methodInfo.getAttributes();
+                for( AttributeInfo attributeInfo : attributes) {
+                    log.info( String.format( "Agent:attribute %s::%s", m.getLongName(), attributeInfo.getName()));
+                }
+
+
+
+                CtClass[] parameterTypes;
+
+                try {
+                    parameterTypes = m.getParameterTypes();
+                } catch (NotFoundException e) {
+                    parameterTypes = null;
+                }
+
+                StringBuilder stringBuilder = new StringBuilder();
+
+                if( parameterTypes != null) {
+                    stringBuilder.append("{");
+                    for (int i = 0; i <= parameterTypes.length; i++) {
+                        if( i ==0 && (m.getMethodInfo().getAccessFlags() & AccessFlag.STATIC) != 0) {
+                         log.info(String.format( "static: %s", m.getLongName()));
+                        } else {
+                            if( i != 0) {
+                                stringBuilder
+                                        .append(String.format("System.out.println(\"===== $%d;%s;\" + $%d);", i, parameterTypes[i - 1].getName(), i));
+                            }
+                        }
+                    }
+                    stringBuilder.append("}");
+                }
+
+                String before = stringBuilder.toString();
+
+                final String beforeString = String.format(
+                        "System.out.println(\"START %s\");%s" +
+                                "", m.getLongName(), before);
+                log.info( String.format("Agent:%s", beforeString));
+                m.insertBefore(beforeString);
+
+//                m.insertBefore("{ System.out.println($1); System.out.println($2); }");
+                m.insertAfter(String.format(
+                        "System.out.println(\"END   %s\");", m.getLongName()));
+            }
+        }
+        for (CtConstructor m : cc.getConstructors()) {
+            m.insertBefore(String.format(
+                    "System.out.println(\"START %s\");", m.getLongName()));
+            m.insertAfter(String.format(
+                    "System.out.println(\"END   %s\");", m.getLongName()));
+        }
+    }
+
     public static void hello() {
-//        System.out.println("Hello");
+        System.out.println("Hello");
     }
 }
