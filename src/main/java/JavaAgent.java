@@ -16,6 +16,6 @@ public class JavaAgent {
 
         log.info(String.format("Agent:Starting Java Agent...... %s", agentArgs == null ? "" : agentArgs));
 
-        JavaAssistAgent.premain(agentArgs, instrumentation);
+        JavaByteBuddyAgent.doPremain(agentArgs, instrumentation);
     }
 }

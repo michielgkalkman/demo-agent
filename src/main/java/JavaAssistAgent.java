@@ -24,7 +24,7 @@ public class JavaAssistAgent {
      * @param agentArgs       The list of agent arguments
      * @param instrumentation The instrumentation object
      */
-    public static void premain(String agentArgs, Instrumentation instrumentation) throws Throwable {
+    public static void doPremain(String agentArgs, Instrumentation instrumentation) throws Throwable {
 
         log.info(String.format("Agent:Starting Java Agent...... %s", agentArgs == null ? "" : agentArgs));
 
